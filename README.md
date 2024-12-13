@@ -10,6 +10,7 @@ pip install rest_framework
 pip install openai --upgrade
 pip install --upgrade pip setuptools wheel
 pip install drf_yasg
+pip install openpyxl
 ```
 
 ## Swager

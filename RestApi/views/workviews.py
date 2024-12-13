@@ -42,8 +42,8 @@ class WorkViewSet(viewsets.ModelViewSet):
         }
     )
     def create(self, request, *args, **kwargs):
-        if getattr(self, 'swagger_fake_view', False):
-            return  # 스키마 생성 중이라면 아무 작업도 수행하지 않
+        # if getattr(self, 'swagger_fake_view', False):
+        #     return  # 스키마 생성 중이라면 아무 작업도 수행하지 않
         try:
             # 엑셀 파일 가져오기
             excel_file = request.FILES.get('file')
