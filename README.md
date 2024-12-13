@@ -11,3 +11,6 @@ pip install openai --upgrade
 pip install --upgrade pip setuptools wheel
 pip install drf_yasg
 ```
+
+## Swager
+- URL : http://localhost:8000/swagger/
