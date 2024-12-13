@@ -11,6 +11,7 @@ pip install openai --upgrade
 pip install --upgrade pip setuptools wheel
 pip install drf_yasg
 pip install openpyxl
+pip install openai==0.28
 ```
 
 ## Swager

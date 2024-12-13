@@ -5,7 +5,7 @@ import logging
 from drf_yasg.utils import swagger_auto_schema
 import pandas as pd
 from azure.core.credentials import AzureKeyCredential
-from openai import AzureOpenAI
+import openai
 from drf_yasg import openapi
 
 from RestApi.model import Work
@@ -83,22 +83,20 @@ class WorkViewSet(viewsets.ModelViewSet):
         return "\n".join(formatted_data)
 
     def _request_gpt(self, data):
-        # Azure GPT API 호출
-        api_key = "your-azure-openai-key"
-        endpoint = "your-azure-endpoint"
-        deployment_name = "your-deployment-name"
+        # Azure OpenAI 설정
+        openai.api_type = "azure"
+        openai.api_base = "https://your-resource-name.openai.azure.com/"
+        openai.api_version = "2023-05-15"  # Azure에서 사용하는 OpenAI API 버전
+        openai.api_key = "your-azure-openai-key"
 
-        client = AzureOpenAI(api_key=api_key, base_url=endpoint, deployment_name=deployment_name)
-
-        # GPT 프롬프트 생성
-        prompt = f"Generate an RFM analysis report based on the following sales data:\n{data}"
-
-        response = client.chat_completion(
+        # GPT 모델 요청
+        response = openai.ChatCompletion.create(
+            engine="your-deployment-name",  # Azure에 배포된 모델 이름
             messages=[
                 {"role": "system", "content": "You are an expert in generating RFM analysis reports."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": "Generate an RFM report based on the sales data."}
             ],
             max_tokens=500
         )
 
-        return response["choices"][0]["message"]["content"]
+        print(response['choices'][0]['message']['content'])
