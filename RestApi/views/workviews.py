@@ -3,44 +3,102 @@ from __future__ import unicode_literals
 from rest_framework import viewsets, status
 import logging
 from drf_yasg.utils import swagger_auto_schema
+import pandas as pd
+from azure.core.credentials import AzureKeyCredential
+from openai import AzureOpenAI
+from drf_yasg import openapi
 
+from RestApi.model import Work
 from RestApi.serializers.workserializers import WorkSerializer
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser
 
 logger = logging.getLogger(__name__)
 
 class WorkViewSet(viewsets.ModelViewSet):
+    queryset = Work.objects.all()  # QuerySet을 명시적으로 정의
+    swagger_fake_view = True
     serializer_class = WorkSerializer
-    swagger_auto_schema(
-        operation_summary='테스트',
-        operation_description='테스트 방식\n\n'
-                              '테스트 데이터 Sample\n\n'
-                              """
-<pre>
-[
-    {
-      "filename": "파일",
-    }
-]
-</pre>
-""",
-        request_body=WorkSerializer,
-        responses={
-            201: "요청했던 json 데이터 그대로 echo"
-        },
-    )
+    parser_classes = [MultiPartParser]  # 파일 업로드를 위해 설정
 
+    swagger_auto_schema(
+        operation_summary="파일 업로드 및 처리",
+        operation_description="엑셀 파일을 업로드하고 RFM 분석 결과를 반환합니다.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'file': openapi.Schema(type=openapi.TYPE_FILE, description="엑셀 파일"),
+            },
+            required=['file'],
+        ),
+        responses={
+            201: openapi.Response("RFM 분석 결과", examples={
+                "application/json": {
+                    "message": "RFM report generated successfully",
+                    "report": "Report content here"
+                }
+            }),
+            400: "잘못된 요청",
+        }
+    )
     def create(self, request, *args, **kwargs):
+        if getattr(self, 'swagger_fake_view', False):
+            return  # 스키마 생성 중이라면 아무 작업도 수행하지 않
         try:
-            serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-            headers = self.get_success_headers(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+            # 엑셀 파일 가져오기
+            excel_file = request.FILES.get('file')
+            if not excel_file:
+                return Response({'message': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 엑셀 파일 파싱
+            df = pd.read_excel(excel_file)
+            data = self._prepare_data(df)
+
+            # Azure GPT API 호출
+            gpt_response = self._request_gpt(data)
+
+            return Response({
+                'message': 'RFM report generated successfully',
+                'report': gpt_response
+            }, status=status.HTTP_201_CREATED)
+
         except KeyError:
             logger.exception(msg='HTTP_400_BAD_REQUEST')
             return Response(status=status.HTTP_400_BAD_REQUEST,
-                            data={'message': 'One of the name of request parameter is invalid'})
+                            data={'message': 'One of the names of request parameter is invalid'})
         except Exception as e:
             logger.exception(msg='501 NOT IMPLEMENTED')
             return Response(status=status.HTTP_501_NOT_IMPLEMENTED, data={'message': str(e)})
+
+    def _prepare_data(self, df):
+        # 데이터 변환 로직
+        records = df.to_dict(orient='records')
+        formatted_data = []
+        for record in records:
+            time = record.get('시간', 'Unknown Time')
+            person = record.get('이름', 'Unknown Person')
+            product = record.get('제품', 'Unknown Product')
+            quantity = record.get('수량', 0)
+            formatted_data.append(f"At {time}, {person} bought {quantity} {product}.")
+        return "\n".join(formatted_data)
+
+    def _request_gpt(self, data):
+        # Azure GPT API 호출
+        api_key = "your-azure-openai-key"
+        endpoint = "your-azure-endpoint"
+        deployment_name = "your-deployment-name"
+
+        client = AzureOpenAI(api_key=api_key, base_url=endpoint, deployment_name=deployment_name)
+
+        # GPT 프롬프트 생성
+        prompt = f"Generate an RFM analysis report based on the following sales data:\n{data}"
+
+        response = client.chat_completion(
+            messages=[
+                {"role": "system", "content": "You are an expert in generating RFM analysis reports."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500
+        )
+
+        return response["choices"][0]["message"]["content"]
